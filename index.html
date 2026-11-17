@@ -127,6 +127,7 @@
     padding: 16px;
     margin-bottom: 20px;
     font-size: 0.85rem;
+    display: none;
   }
   .setup input {
     width: 100%;
@@ -138,35 +139,26 @@
     border: 1px solid #444;
     font-size: 0.9rem;
   }
-  .setup .hint {
-    margin-top: 8px;
-    color: #b8a070;
-    font-size: 0.8rem;
-  }
 </style>
 </head>
 <body>
 
-<h1>Копилка (Облако)</h1>
+<h1>Копилка</h1>
 <p class="subtitle">Данные в Google Таблице — открывается с любого телефона</p>
 
-<div class="setup" id="setupBox">
-  <b>Вставь URL веб-приложения Google Apps Script</b>
-  <input type="text" id="scriptUrl" placeholder="https://script.google.com/macros/s/....../exec">
-  <div class="hint">Нужен URL, который заканчивается на <b>/exec</b> (не /dev)</div>
-  <button class="primary" onclick="saveUrl()" style="margin-top:10px">Сохранить URL</button>
-</div>
-
-<div class="status" id="status">Вставь URL и нажми «Сохранить URL»</div>
+<div class="status" id="status">Загрузка...</div>
 <div class="dashboard" id="dashboard"></div>
 <div id="months"></div>
 
 <div class="controls">
-  <button class="primary" id="btnSave" onclick="saveToCloud()" disabled>Сохранить в облако</button>
-  <button id="btnLoad" onclick="loadFromCloud()" disabled>Обновить с облака</button>
+  <button class="primary" id="btnSave" onclick="saveToCloud()">Сохранить в облако</button>
+  <button id="btnLoad" onclick="loadFromCloud()">Обновить с облака</button>
 </div>
 
 <script>
+// === Твой Apps Script URL ===
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwzlMMvouVsiUaiZeJRafS082aCFcEdfBxXoP1BX89ilmqnHwYzGpgRnTUdCAKOVIEd/exec';
+
 const MONTHS = [
   "Декабрь 2026", "Январь 2027", "Февраль 2027", "Март 2027",
   "Апрель 2027", "Май 2027", "Июнь 2027", "Июль 2027",
@@ -176,16 +168,6 @@ const TARGET_AVANS = 1500000;
 const TARGET_ZP = 1500000;
 
 let data = {};
-let SCRIPT_URL = '';
-
-function safeGet(key) {
-  try { return localStorage.getItem(key) || ''; } catch (e) { return ''; }
-}
-function safeSet(key, value) {
-  try { localStorage.setItem(key, value); } catch (e) {}
-}
-
-SCRIPT_URL = safeGet('kopilka_script_url');
 
 function format(n) {
   return new Intl.NumberFormat('ru-RU').format(Math.round(n || 0));
@@ -196,21 +178,10 @@ function setStatus(text) {
   if (el) el.textContent = text;
 }
 
-function enableButtons(enabled) {
-  const b1 = document.getElementById('btnSave');
-  const b2 = document.getElementById('btnLoad');
-  if (b1) b1.disabled = !enabled;
-  if (b2) b2.disabled = !enabled;
-}
-
 async function loadFromCloud() {
-  if (!SCRIPT_URL) {
-    setStatus('Сначала вставь URL веб-приложения');
-    return;
-  }
   setStatus('Загружаю с облака...');
   try {
-    const res = await fetch(SCRIPT_URL + (SCRIPT_URL.includes('?') ? '&' : '?') + 't=' + Date.now());
+    const res = await fetch(SCRIPT_URL + '?t=' + Date.now());
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const json = await res.json();
     data = json || {};
@@ -221,15 +192,16 @@ async function loadFromCloud() {
     setStatus('Загружено из Google Таблицы');
   } catch (e) {
     console.error(e);
-    setStatus('Ошибка загрузки: ' + e.message + '. Нужен URL с /exec и доступ «Все».');
+    setStatus('Ошибка загрузки: ' + e.message);
+    // Даже при ошибке показываем пустую форму
+    MONTHS.forEach(m => {
+      if (!data[m]) data[m] = { avans: 0, zp: 0, premia: 0 };
+    });
+    render();
   }
 }
 
 async function saveToCloud() {
-  if (!SCRIPT_URL) {
-    setStatus('Сначала вставь URL');
-    return;
-  }
   setStatus('Сохраняю...');
   try {
     await fetch(SCRIPT_URL, {
@@ -238,35 +210,11 @@ async function saveToCloud() {
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify(data)
     });
-    setStatus('Сохранено в Google Таблицу (проверь таблицу через пару секунд)');
+    setStatus('Сохранено в Google Таблицу');
   } catch (e) {
     console.error(e);
     setStatus('Ошибка сохранения: ' + e.message);
   }
-}
-
-function saveUrl() {
-  const input = document.getElementById('scriptUrl');
-  let url = (input && input.value) ? input.value.trim() : '';
-  if (!url) {
-    setStatus('Вставь URL');
-    return;
-  }
-  if (!url.includes('script.google.com')) {
-    setStatus('Похоже, это не ссылка на Apps Script');
-    return;
-  }
-  // Если дали /dev — предупреждаем
-  if (url.endsWith('/dev')) {
-    setStatus('Это /dev ссылка. Нужна ссылка с /exec (Новое развёртывание → Веб-приложение → Все)');
-    return;
-  }
-  SCRIPT_URL = url;
-  safeSet('kopilka_script_url', url);
-  const box = document.getElementById('setupBox');
-  if (box) box.style.display = 'none';
-  enableButtons(true);
-  loadFromCloud();
 }
 
 function render() {
@@ -341,16 +289,7 @@ function render() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-  if (SCRIPT_URL) {
-    const box = document.getElementById('setupBox');
-    if (box) box.style.display = 'none';
-    const input = document.getElementById('scriptUrl');
-    if (input) input.value = SCRIPT_URL;
-    enableButtons(true);
-    loadFromCloud();
-  } else {
-    setStatus('Вставь URL веб-приложения (/exec) и нажми «Сохранить URL»');
-  }
+  loadFromCloud();
 });
 </script>
 </body>
