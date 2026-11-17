@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Копилка — Облако</title>
+<style>
+  :root {
+    --ink: #071018;
+    --ivory: #e7eef2;
+    --amber: #e4b15a;
+    --steel: #16384a;
+    --teal: #8ec8c3;
+    --card: #0d1a24;
+    --border: #1e3a4c;
+    --red: #ff6b6b;
+    --green: #51cf66;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--ink);
+    color: var(--ivory);
+    line-height: 1.5;
+    padding: 16px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 1.6rem; color: var(--amber); margin-bottom: 4px; }
+  .subtitle { color: var(--teal); font-size: 0.9rem; margin-bottom: 20px; }
+  .status { font-size: 0.85rem; color: var(--teal); margin-bottom: 14px; min-height: 1.2em; }
+  .dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .stat {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    text-align: center;
+  }
+  .stat .label { font-size: 0.75rem; color: var(--teal); text-transform: uppercase; letter-spacing: 0.4px; }
+  .stat .value { font-size: 1.3rem; font-weight: 700; margin-top: 4px; }
+  .stat .value.plan { color: var(--amber); }
+  .stat .value.fact { color: var(--green); }
+  .month {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+  .month-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .month-name { font-weight: 600; font-size: 1.1rem; }
+  .month-summary { font-size: 0.85rem; color: var(--teal); }
+  .inputs {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+  }
+  @media (max-width: 600px) {
+    .inputs { grid-template-columns: 1fr; }
+  }
+  .field { display: flex; flex-direction: column; }
+  .field label {
+    font-size: 0.75rem;
+    color: var(--teal);
+    margin-bottom: 4px;
+  }
+  .field input {
+    background: #0a141c;
+    border: 1px solid var(--border);
+    color: var(--ivory);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 1rem;
+    width: 100%;
+  }
+  .field input:focus {
+    outline: none;
+    border-color: var(--amber);
+  }
+  .target-hint {
+    font-size: 0.7rem;
+    color: #6a8a9a;
+    margin-top: 2px;
+  }
+  .controls {
+    display: flex;
+    gap: 10px;
+    margin: 20px 0;
+    flex-wrap: wrap;
+  }
+  button {
+    background: var(--steel);
+    color: var(--ivory);
+    border: none;
+    padding: 11px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+  }
+  button:hover { background: #1e4a62; }
+  button.primary {
+    background: var(--amber);
+    color: var(--ink);
+    font-weight: 600;
+  }
+  button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  .setup {
+    background: #1a1208;
+    border: 1px solid var(--amber);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+    font-size: 0.85rem;
+  }
+  .setup input {
+    width: 100%;
+    margin-top: 8px;
+    padding: 10px;
+    border-radius: 6px;
+    background: #0a141c;
+    color: white;
+    border: 1px solid #444;
+    font-size: 0.9rem;
+  }
+  .setup .hint {
+    margin-top: 8px;
+    color: #b8a070;
+    font-size: 0.8rem;
+  }
+</style>
+</head>
+<body>
+
+<h1>Копилка (Облако)</h1>
+<p class="subtitle">Данные в Google Таблице — открывается с любого телефона</p>
+
+<div class="setup" id="setupBox">
+  <b>Вставь URL веб-приложения Google Apps Script</b>
+  <input type="text" id="scriptUrl" placeholder="https://script.google.com/macros/s/....../exec">
+  <div class="hint">Нужен URL, который заканчивается на <b>/exec</b> (не /dev)</div>
+  <button class="primary" onclick="saveUrl()" style="margin-top:10px">Сохранить URL</button>
+</div>
+
+<div class="status" id="status">Вставь URL и нажми «Сохранить URL»</div>
+<div class="dashboard" id="dashboard"></div>
+<div id="months"></div>
+
+<div class="controls">
+  <button class="primary" id="btnSave" onclick="saveToCloud()" disabled>Сохранить в облако</button>
+  <button id="btnLoad" onclick="loadFromCloud()" disabled>Обновить с облака</button>
+</div>
+
+<script>
+const MONTHS = [
+  "Декабрь 2026", "Январь 2027", "Февраль 2027", "Март 2027",
+  "Апрель 2027", "Май 2027", "Июнь 2027", "Июль 2027",
+  "Август 2027", "Сентябрь 2027", "Октябрь 2027", "Ноябрь 2027"
+];
+const TARGET_AVANS = 1500000;
+const TARGET_ZP = 1500000;
+
+let data = {};
+let SCRIPT_URL = '';
+
+function safeGet(key) {
+  try { return localStorage.getItem(key) || ''; } catch (e) { return ''; }
+}
+function safeSet(key, value) {
+  try { localStorage.setItem(key, value); } catch (e) {}
+}
+
+SCRIPT_URL = safeGet('kopilka_script_url');
+
+function format(n) {
+  return new Intl.NumberFormat('ru-RU').format(Math.round(n || 0));
+}
+
+function setStatus(text) {
+  const el = document.getElementById('status');
+  if (el) el.textContent = text;
+}
+
+function enableButtons(enabled) {
+  const b1 = document.getElementById('btnSave');
+  const b2 = document.getElementById('btnLoad');
+  if (b1) b1.disabled = !enabled;
+  if (b2) b2.disabled = !enabled;
+}
+
+async function loadFromCloud() {
+  if (!SCRIPT_URL) {
+    setStatus('Сначала вставь URL веб-приложения');
+    return;
+  }
+  setStatus('Загружаю с облака...');
+  try {
+    const res = await fetch(SCRIPT_URL + (SCRIPT_URL.includes('?') ? '&' : '?') + 't=' + Date.now());
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    data = json || {};
+    MONTHS.forEach(m => {
+      if (!data[m]) data[m] = { avans: 0, zp: 0, premia: 0 };
+    });
+    render();
+    setStatus('Загружено из Google Таблицы');
+  } catch (e) {
+    console.error(e);
+    setStatus('Ошибка загрузки: ' + e.message + '. Нужен URL с /exec и доступ «Все».');
+  }
+}
+
+async function saveToCloud() {
+  if (!SCRIPT_URL) {
+    setStatus('Сначала вставь URL');
+    return;
+  }
+  setStatus('Сохраняю...');
+  try {
+    await fetch(SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(data)
+    });
+    setStatus('Сохранено в Google Таблицу (проверь таблицу через пару секунд)');
+  } catch (e) {
+    console.error(e);
+    setStatus('Ошибка сохранения: ' + e.message);
+  }
+}
+
+function saveUrl() {
+  const input = document.getElementById('scriptUrl');
+  let url = (input && input.value) ? input.value.trim() : '';
+  if (!url) {
+    setStatus('Вставь URL');
+    return;
+  }
+  if (!url.includes('script.google.com')) {
+    setStatus('Похоже, это не ссылка на Apps Script');
+    return;
+  }
+  // Если дали /dev — предупреждаем
+  if (url.endsWith('/dev')) {
+    setStatus('Это /dev ссылка. Нужна ссылка с /exec (Новое развёртывание → Веб-приложение → Все)');
+    return;
+  }
+  SCRIPT_URL = url;
+  safeSet('kopilka_script_url', url);
+  const box = document.getElementById('setupBox');
+  if (box) box.style.display = 'none';
+  enableButtons(true);
+  loadFromCloud();
+}
+
+function render() {
+  const container = document.getElementById('months');
+  if (!container) return;
+  container.innerHTML = '';
+  let totalPlan = 0;
+  let totalFact = 0;
+
+  MONTHS.forEach(month => {
+    const d = data[month] || { avans: 0, zp: 0, premia: 0 };
+    const fact = (Number(d.avans) || 0) + (Number(d.zp) || 0) + (Number(d.premia) || 0);
+    const planMonth = TARGET_AVANS + TARGET_ZP;
+    totalPlan += planMonth;
+    totalFact += fact;
+
+    const el = document.createElement('div');
+    el.className = 'month';
+    el.innerHTML = `
+      <div class="month-header">
+        <div class="month-name">${month}</div>
+        <div class="month-summary">План: ${format(planMonth)} · Факт: <b>${format(fact)}</b></div>
+      </div>
+      <div class="inputs">
+        <div class="field">
+          <label>С аванса</label>
+          <input type="number" data-month="${month}" data-field="avans" value="${d.avans || ''}" placeholder="0">
+          <div class="target-hint">цель 1 500 000</div>
+        </div>
+        <div class="field">
+          <label>С ЗП</label>
+          <input type="number" data-month="${month}" data-field="zp" value="${d.zp || ''}" placeholder="0">
+          <div class="target-hint">цель 1 500 000</div>
+        </div>
+        <div class="field">
+          <label>С премии</label>
+          <input type="number" data-month="${month}" data-field="premia" value="${d.premia || ''}" placeholder="0">
+          <div class="target-hint">сколько положил</div>
+        </div>
+      </div>
+    `;
+    container.appendChild(el);
+  });
+
+  const diff = totalFact - totalPlan;
+  const dash = document.getElementById('dashboard');
+  if (dash) {
+    dash.innerHTML = `
+      <div class="stat">
+        <div class="label">План (аванс+ЗП)</div>
+        <div class="value plan">${format(totalPlan)}</div>
+      </div>
+      <div class="stat">
+        <div class="label">Факт положено</div>
+        <div class="value fact">${format(totalFact)}</div>
+      </div>
+      <div class="stat">
+        <div class="label">Разница</div>
+        <div class="value">${diff >= 0 ? '+' : ''}${format(diff)}</div>
+      </div>
+    `;
+  }
+
+  document.querySelectorAll('input[data-month]').forEach(input => {
+    input.addEventListener('input', (e) => {
+      const m = e.target.dataset.month;
+      const f = e.target.dataset.field;
+      if (!data[m]) data[m] = { avans: 0, zp: 0, premia: 0 };
+      data[m][f] = Number(e.target.value) || 0;
+    });
+  });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  if (SCRIPT_URL) {
+    const box = document.getElementById('setupBox');
+    if (box) box.style.display = 'none';
+    const input = document.getElementById('scriptUrl');
+    if (input) input.value = SCRIPT_URL;
+    enableButtons(true);
+    loadFromCloud();
+  } else {
+    setStatus('Вставь URL веб-приложения (/exec) и нажми «Сохранить URL»');
+  }
+});
+</script>
+</body>
+</html>
